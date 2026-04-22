@@ -38,9 +38,11 @@ tool2 = StructuredTool.from_function(
 
 tool = [tool1, tool2]
 model_with_tools = model.bind_tools(tool)
-message = HumanMessage("2 * 3 等于多少?")
 
-
-ai_msg = model_with_tools.invoke([message])
+ai_msg = model_with_tools.invoke("2 * 6 等于多少")
 print(ai_msg.additional_kwargs)
 print(ai_msg.tool_calls)
+print(ai_msg.content)
+
+print()
+print(ai_msg)

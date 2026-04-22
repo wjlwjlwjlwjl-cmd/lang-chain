@@ -229,3 +229,13 @@ def add(
 ```
 
 > Annotated，意思是带有注释的
+
+### 5.3 绑定工具
+
+#### 5.3.1 bind_tool
+使用 bind_tool\[tool1, tool2, ...\] 的方式将调用它的模型，绑定模型到若干个工具，并返回一个 Runnable 对象，后续可以通过其调用 invoke 方法，完成工具的调用；它提供的参数主要是原始提示词字符串或者是消息列表（ \[HumanMessage(content="")\]
+#### 5.3.2 AIMessage
+`AIMessage`，是 BaseMessage 之一，负责传递大模型调用工具的接获信息，具体来说，包括
+* `content`，消息正文
+* `additional_kwargs`，与消息正文相关的其他有效载荷，比如具体调用了哪个工具（`tool_call`字段）
+* `response_metadata`，相应元数据，包括响应标头、令牌计数、调用模型等等
