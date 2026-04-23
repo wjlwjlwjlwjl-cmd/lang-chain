@@ -234,8 +234,137 @@ def add(
 
 #### 5.3.1 bind_tool
 使用 bind_tool\[tool1, tool2, ...\] 的方式将调用它的模型，绑定模型到若干个工具，并返回一个 Runnable 对象，后续可以通过其调用 invoke 方法，完成工具的调用；它提供的参数主要是原始提示词字符串或者是消息列表（ \[HumanMessage(content="")\]
+
+tool_choice 可以指定模型调用，`tool_choice="any"`就是告诉大模型至少调用一个工具，哪怕问题与工具毫不相关
 #### 5.3.2 AIMessage
 `AIMessage`，是 BaseMessage 之一，负责传递大模型调用工具的接获信息，具体来说，包括
 * `content`，消息正文
-* `additional_kwargs`，与消息正文相关的其他有效载荷，比如具体调用了哪个工具（`tool_call`字段）
+* `additional_kwargs`，与消息正文相关的其他有效载荷，比如具体调用了哪些个工具（`tool_calls`字段）
 * `response_metadata`，相应元数据，包括响应标头、令牌计数、调用模型等等
+
+大模型自己决定是否调用工具以及调用何种工具，问一个毫不相关的问题大模型并不会调用绑定的工具，这也侧面意味着我们的文档注释写的越详细清晰，调用就越准确
+
+`AIMessage` 并不负责产生结果，负责产生结果的是下面的步骤。更明确的，`AIMessage` 负责让 LLM 从我们的 HumanMessage 中解析出调用哪个工具、应该给予工具哪些参数，将他们交给本地方法完成调用之后，才产生了结果
+
+> 这里也是为什么在第一次将 HumanMessage 传给 LLM 时，AIMessage.content 不含内容的原因
+#### 5.3.3 ToolMessage
+在 `AIMessage` 将调用工具、调用参数等传递回来之后，我们就需要在 **本地** 完成方法的调用。随后会产生 `ToolMessage` 包含工具调用的结果。
+
+最后，将所有调用工具产生的 `ToolMessage` 添加到我们的 message 之中，一起交给 LLM，就完成了整个工具的调用流程
+
+```python
+tools = [tool1, tool2]
+model_with_tools = model.bind_tools(tools)
+message = [
+    HumanMessage("100*100等于多少 100+100等于多少")
+]
+ai_msg = model_with_tools.invoke(message)
+
+for tool_call in ai_msg.tool_calls:
+    selected_tool = {"add": tool1, "multiply": tool2}[tool_call["name"].lower()]
+    tool_message = selected_tool.invoke(tool_call)
+    message.append(tool_message)
+result = model_with_tools.invoke(message)
+```
+
+#### 5.3.4 其他工具
+
+langchain 中，并不是所有工具都要我们手动实现，有很多其他工具，langchain 已经帮我们封装好了，比如 tavily，可以让 LLM 获取互联网上最新的知识，不过需要魔法上网
+
+### 5.4 结构化输出
+
+langchain 中允许设置 LLM 的输出格式，通过 `with_structured_output`，它会返回一个 Runnable 对象，通过它就可以获得 LLM 格式化的输出
+
+* `include_raw`，是否将原始 LLM 输出内容返回。默认是 False，设置后，相应分为 raw、parsed、parsed_error 三个部分。
+	* `raw`，包含 LLM 原始返回的全部信息，包括格式化的解析结果、调用模型、Token 消耗等等 
+	* `parsed`，包含解析后的格式化结果，默认返回的内容就是这里面的信息。解析失败，该部分为 None
+	* `parsed_error`，如果出错，这个部分用来存放错误信息
+#### 5.4.1 通过 pydantic 对象
+
+支持嵌套格式化，但要注意，这里不要造成循环引用 ❌
+
+```python
+class Joke(BaseModel):
+    """给用户讲一个笑话 """
+    setup: str = Field(description="笑话的开头")
+    punchline: str = Field(description="笑话的笑点")
+    rating : Optional[int] = Field(default=None, description="笑话的评分(1~10)")
+class Jokes(BaseModel):
+    """给用户提供的几个笑话"""
+    jokes: List[Joke] = Field(description="笑话的合集")
+model = ChatOpenAI(
+    model="qwen-turbo",
+    max_tokens=1024
+)
+model_structured_output = model.with_structured_output(Jokes)
+message=[
+    HumanMessage("分别讲一个关于唱歌和跳舞的笑话")
+]
+result = model_structured_output.invoke(message)
+```
+
+输出结果
+```python
+jokes=[Joke(setup='为什么歌手总是喜欢在浴室唱歌？', punchline='为什么歌手总是喜欢在浴室唱歌？因为那里有最好的回声！', rating=5), Joke(setup='跳舞时最怕什么？', punchline='跳舞时最怕什么？被别人踩到脚，尤其是当你是舞者的时候。', rating=4)]
+```
+
+#### 5.4.2 通过 TypedDict
+
+TypedDict 用来检查字典的拼写错误、类型不匹配，可以用来作为 `with_structured_output` 的参数，产生 Runnable 对象
+
+```python
+class Joke(TypedDict):
+    setup = Annotated[str, "笑话的开头"]
+    punchline = Annotated[str, "笑话的笑点"]
+    rating = Annotated[Optional[int], Field(default=None, description="笑点评分(1~10)")]
+model = ChatOpenAI(
+    model="qwen-turbo",
+)
+model_structured_output = model.with_structured_output(Joke, include_raw=True)
+message=[
+    HumanMessage("分别讲一个关于跳舞的笑话")
+]
+result = model_structured_output.invoke(message)
+```
+
+#### 5.4.3 通过 json
+
+也可以自己定义 json 串，例如：
+```python
+json_schema = {
+    "title": "joke",
+    "description": "给⽤⼾讲⼀个笑话。",
+    "type": "object",
+    "properties": {
+        "setup": {
+            "type": "string",
+            "description": "这个笑话的开头",
+        },
+        "punchline": {
+            "type": "string",
+            "description": "这个笑话的妙语",
+        },
+        "rating": {
+            "type": "integer",
+            "description": "从1到10分，给这个笑话评分",
+            "default": None,
+        },
+    },
+    "required": ["setup", "punchline"],
+}
+model = ChatOpenAI(
+    model="qwen-turbo",
+)
+model_structured_output = model.with_structured_output(json_schema)
+message=[
+    HumanMessage("分别讲一个关于跳舞的笑话")
+]
+result = model_structured_output.invoke(message)
+```
+
+#### 5.4.4 通过 Union 创建具有联合类型属性的父模式
+
+```python
+class Standard(BaseModel):
+    output: Annotated[Union[Dialog, Joke], Field(description="最后输出内容的要求")]
+```

@@ -36,13 +36,16 @@ tool2 = StructuredTool.from_function(
     name = "multiply"
 )
 
-tool = [tool1, tool2]
-model_with_tools = model.bind_tools(tool)
+tools = [tool1, tool2]
+model_with_tools = model.bind_tools(tools)
+message = [
+    HumanMessage("100*100等于多少 100+100等于多少")
+]
+ai_msg = model_with_tools.invoke(message)
+for tool_call in ai_msg.tool_calls:
+    selected_tool = {"add": tool1, "multiply": tool2}[tool_call["name"].lower()]
+    tool_message = selected_tool.invoke(tool_call)
+    message.append(tool_message)
 
-ai_msg = model_with_tools.invoke("2 * 6 等于多少")
-print(ai_msg.additional_kwargs)
-print(ai_msg.tool_calls)
-print(ai_msg.content)
-
-print()
-print(ai_msg)
+result = model_with_tools.invoke(message)
+print(result)
