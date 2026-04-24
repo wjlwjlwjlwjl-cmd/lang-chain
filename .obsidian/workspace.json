@@ -6,6 +6,29 @@
       {
         "id": "f998e5b60e43790b",
         "type": "tabs",
+        "dimension": 13.32899869960988,
+        "children": [
+          {
+            "id": "604402e7fa671717",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "info.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "info 的大纲"
+            }
+          }
+        ]
+      },
+      {
+        "id": "926e16190572e022",
+        "type": "tabs",
+        "dimension": 86.67100130039012,
         "children": [
           {
             "id": "4e7cd8ddb17b2952",
@@ -78,7 +101,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 222.50247192382812
+    "width": 222.50247192382812,
+    "collapsed": true
   },
   "right": {
     "id": "e2eb9fc670e11a5d",
@@ -185,16 +209,16 @@
   },
   "active": "4e7cd8ddb17b2952",
   "lastOpenFiles": [
+    "stream/defined_parser.py",
+    "stream/astream.py",
+    "stream/astream",
+    "start/info_collecter.py",
+    "start/info_collecter",
+    "info_collecter",
     "start/with_structured_output.py",
     "start/TavilySearch.py",
     "start/tool.pyDdGVLf.bck",
     "start/tool.pyNONAti.bck",
-    "start/tool.pyoAlUHd.bck",
-    "start/tool.pyIpT64U.bck",
-    "start/tool.pyPHV1Bg.bck",
-    "start/tool.pyoaOvDG.bck",
-    "start/tool.pyo3kXic.bck",
-    "start/tool.pyKciNSU.bck",
-    "start/tool.pyQleItR.bck"
+    "start/tool.pyoAlUHd.bck"
   ]
 }
