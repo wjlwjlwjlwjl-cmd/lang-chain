@@ -366,12 +366,215 @@ for chunk in chain.stream("写一首关于爱情的诗歌"):
     print(chunk)
 ```
 
-## 九、关键优化建议
+### 8.4 SSE 协议
 
-- 密钥管理：API_KEY、BASE_URL存入环境变量/.env，禁止硬编码。
-    
-- 参数调优：temperature=0（严谨场景）；0.7~1.2（创意场景）。
-    
-- 工具开发：注释清晰，提升调用准确率。
-    
-- 生产优先：结构化输出+工具调用+本地部署，保障隐私与稳定。
+流式传输需要服务器向客户端主动发送消息。首先我们想到的可能是 WebSocket 协议，这也确实可以，但是需要服务端维护一个长连接，是具有额外的开销。
+
+几乎所有的 LLM 对于流式传输都是用的是 SSE 协议（Server-Sent Event），基于 HTTP 协议，CS 之间建立连接之后，Server 会返回具有 `Content-Type: text/event-stream;charset=utf-8 Connection: keep-alive` 报头的信息，表示当前为流式传输，客户端不要关闭连接。SSE 协议中，客户端后续不能主动给服务器发送消息，对于这种 LLM 的流式传输的场景，本来就不需要客户端发送第一个请求后，后续继续请求，所以 SSE 更符合使用情景
+
+LangChain 的流式传输，并没有自己封装任何协议，是依赖于大模型供应商提供的流式传输的能力，通过 SSE 协议完成的。其中，AIMessageChunk 是 LangChain 根据大模型供应商的 SSE 接口转换而成的
+## 九、LangChain 核心组件
+
+### 9.1 消息
+
+* LangChain 中，提供的 SystemMessage、HumanMessage、AIMessage、AIMessageChunk、ToolMessage，都是对不同大模型厂商的接口封装，均继承自 BaseMessage
+
+* BaseMessage 提供了一些通用方法，如 pretty_print，类似 git log --pretty的思想，更清晰美观的展示消息
+
+* LangChain 对话模式
+
+	* 模式一：SystemMessage ---> \[HumanMessage ---> AIMessage\] ---> \[HumanMessage ---> AIMessage\]...... 其中方括号表示一轮对话
+
+	* 模式二：SystemMessage ---> \[HumanMessage ---> AIMessage ---> ToolMessage ---> AIMessage\]
+
+### 9.2 消息缓存
+
+在使用 LLM 时，我们发现他是能记住一定范围内的上下文的。在 LangChain 中，如果只是使用简单的 invoke 或者 stream 可以发现它并没有记忆：其实 LLM 本身是不具备记忆属性的，每一次调用都是一次全新的推理过程，把上面几轮的用户消息和模型的消息给它，就是作为它的“记忆”，组合拼接成含有“记忆”的答案。
+
+比如下面最简单粗暴的方法，就可以实现记忆的功能
+
+```python
+messages = [
+    HumanMessage("我是张三"),
+    AIMessage("你好张三，有什么我可以帮你的吗?"),
+    HumanMessage("我是谁?")
+]
+model.invoke(messages).pretty_print();
+```
+
+回答如下，可以发现 LLM 是知道我叫什么的。
+
+```shell
+================================== Ai Message ==================================
+你是张三！😊 很高兴再次见到你。有什么我可以帮你的吗？或者你想聊些什么？
+```
+
+当然这种方法太过简单粗暴了。LangChain 为我们提供了 BaseChatMessageHistory、InMemoryChatMessageHistory 和 RunnableWithMessageHistory，实现上下文的记忆功能。其中，我们使用 invoke 的 config 字段传入 session_id，用来区分不同会话的上下文
+
+```python
+cache = {}
+def memory_cache(session_id: str) -> BaseChatMessageHistory:
+    if session_id not in cache:
+        cache[session_id] = InMemoryChatMessageHistory()
+    return cache[session_id]
+model_with_memory = RunnableWithMessageHistory(model, memory_cache)
+config1 = {"configurable": { "session_id": "1"}}
+model_with_memory.invoke(
+    "我叫王家乐",
+    config = config
+).pretty_print()
+model_with_memory.invoke(
+    "我是谁？",
+    config = config
+).pretty_print()
+```
+
+不过这种方法现在已经不建议使用了，到了 LangGraph 持久化再往下说
+
+### 9.3 消息裁剪
+
+一个 LLM 能够处理的上下文是由长度限制的，超过这个限制就需要裁剪，LangChain 允许我们自己设置裁剪策略。
+
+```python
+trimmer = trim_messages(
+    max_tokens=10, # 最大 token 限制
+    token_counter=model, # 通过 语言模型的令牌计数统计
+    strategy="last", # 保留最后的消息，如果为 "first" 就是保留最新的消息
+    allow_partial=False, # 允许消息从中间被裁剪，一般不允许，会导致内容含义改变
+    include_system=True, # 是否总是包含第一条 SystemMessage，建议包含，因为其包含对聊天模型的特殊说明
+    start_on='human' # 除了第一条 SystemMessage，保留的第一套消息的类型
+)
+```
+
+需要注意的是，并不是所有 LLM 都支持通过语言模型的令牌计数来限制 token，比如 qwen-turbo。这里就可以使用另一种方式，通过消息数量来裁剪
+```python
+trimmer = trim_messages(
+    max_tokens=10, # 此时 max_token 表示最大消息数量
+    token_counter=len,
+    strategy="last",
+    allow_partial=False,
+    include_system=True,
+    start_on='human'
+)
+```
+
+### 9.4 消息过滤
+
+除了裁剪，有的时候我们想把所有历史中指定的内容交给 LLM，这时候就需要会话历史裁剪。Langchain 在 langchain_core.messages 中提供了 filter_message 来进行过滤，可以通过消息类型、消息 id 等进行过滤，例如：
+
+```python
+messages = [
+    SystemMessage("you are a good assistant", id='1'),
+    HumanMessage("My name is John", id='1'),
+    AIMessage("Hello, John", id='2'),
+    HumanMessage("I'm very happy today", id='2'),
+    AIMessage("Congratulations! Why?", id='3'),
+    HumanMessage("Because I hava good grades in my exam! Remember what's my name?", id='3')
+]
+filtered_message = filter_messages(messages, include_types=[HumanMessage])
+model.invoke(filtered_message).pretty_print()
+filtered_message  = filter_messages(messages, include_ids='3') # 这里也可以换成 exclude_...
+model.invoke(filtered_message).pretty_print()
+```
+
+输出内容如下，可以看到，第二次发送其实 LLM 并不知道我们叫什么（瞎猜不算）
+
+```text
+================================== Ai Message ==================================
+I remember your name is John! 🎉 That's wonderful that you got good grades on your exam. I'm happy for you, John! What are you going to do now that you're feeling so great?
+================================== Ai Message ==================================
+Congratulations! I'm so happy for you! 🎉 Your name is [Your Name], right? (I might need a reminder if you've told me before!) What's your favorite subject?
+```
+
+### 9.5 消息合并
+
+在历史记录中，可能会出现多个同类型消息连在一起的情况（比如多个 HumanMessage、SystemMessage 连在一起），有些 LLM 不允许这种情况，所以我们可以通过 LangChain 的 merge_message_run 来解决这个问题
+
+```python
+messages=[
+    SystemMessage("you are a coding assistant"),
+    SystemMessage("you always feel happy to answer user's questions, but always use Chinese to answer"),
+    HumanMessage("Do you think LangChain is good to use?"),
+    HumanMessage("or do you think I should use LangGraph"),
+    AIMessage("Would you like to tell me, why you wanna using them?"),
+    AIMessage("Then I can give you more infomation?"),
+    HumanMessage("Give me some introduction about them")
+]
+merged = merge_message_runs(messages) # 方式一：直接将消息合并
+print(model.invoke(messages))
+
+merger = merge_message_runs() # 方式二：构造消息合并器，构建链式调用
+chain = merger | model
+print(chain.invoke(messages))
+```
+
+### 9.5 提示词模板
+
+在一个需要批量提出大量类似请求的情境下，为了保证输出的质量和效率，我们可以使用提示词模板。提示词模板可以让我们把精力放在提示词优化上，只需要让应用把相应的变量传给我们即可
+
+#### 9.5.1 字符串模板
+
+```python
+from langchain_core.prompts import PromptTemplate
+prompt_template = PromptTemplate.from_template("translate to {language}") # 直接通过字符串模板初始化
+print(prompt_template.invoke("Chinese"))
+
+prompt_template = PromptTemplate( # 指定变量、模板初始化
+    input_variables=["languages"],
+    template="translate to {languages}"
+)
+print(prompt_template.invoke("Chinese"))
+```
+
+#### 9.5.2 消息模板
+
+消息模板在 LangChain 这种直接与聊天模型交互的场景下最为实用。通过指定消息类型和模板的方式，就可以定义一个消息模板。消息模板还实现了 Runnalbe 接口，可以让我们链式调用
+
+消息模板既可以直接 invoke，实例化出模板消息；也可以在流式调用中，通过指定变量值的方式完成调用
+
+```python
+chat_prompt_template = ChatPromptTemplate(
+    [
+        ("system", "translate the content into {language}"),
+        ("user", "{text}")
+    ]
+)
+message_template = chat_prompt_template.invoke(
+    {
+        "language": "English",
+        "text": "此曲只应天上有，人间能得几回闻"
+    }
+)
+
+chain = chat_prompt_template | model
+for token in chain.stream({
+    "language": "Chinese",
+    "text": "This melody should only be found in heaven; how often can it be heard among mortals?"
+}):
+```
+
+### 9.6 从 LangChain_Hub 获取提示词
+
+LangChain_Hub 可以认为是 LangChain 的 GitHub，有许多优质的提示词和模板，我们可以直接像 git 一样拉去下来使用，比如下面使用 prompt_maker 的例子
+
+```python
+from langsmith import Client
+model = ChatOpenAI(
+    model="qwen-turbo"
+)
+client = Client()
+prompt = client.pull_prompt("hardkothari/prompt-maker")
+while True:
+    task = input("请输入你的任务（输入 quit 以退出）：\n")
+    if task == 'quit':
+        break
+    task_prompt = input("请输入你的任务的提示词，后续会自动优化：\n")
+    chain = prompt | model
+    final_prompt = chain.invoke({
+        "task": task,
+        "lazy_prompt": task_prompt
+    })
+    for token in model.stream([final_prompt]):
+        print(token.content, end='')
+    print()
+```

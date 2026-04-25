@@ -13,6 +13,4 @@ messages = [
 parser = StrOutputParser()
 #chain = model | parser
 #chain = RunnableSequence(first = model, last = parser)
-chain = model.pipe(parser)
-result = chain.invoke(messages)
-print(result)
+model.invoke(messages).pretty_print()

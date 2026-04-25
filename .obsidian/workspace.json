@@ -6,7 +6,7 @@
       {
         "id": "f998e5b60e43790b",
         "type": "tabs",
-        "dimension": 13.32899869960988,
+        "dimension": 13.328998699609876,
         "children": [
           {
             "id": "604402e7fa671717",
@@ -28,7 +28,7 @@
       {
         "id": "926e16190572e022",
         "type": "tabs",
-        "dimension": 86.67100130039012,
+        "dimension": 86.67100130039013,
         "children": [
           {
             "id": "4e7cd8ddb17b2952",
@@ -209,16 +209,16 @@
   },
   "active": "4e7cd8ddb17b2952",
   "lastOpenFiles": [
+    "component/langchain_hub.py",
+    "langchain_hub.py",
+    "component/template.py",
+    "component/merge_messages.py",
+    "component/filter_messages.py",
+    "component/trimmer.py",
+    "component/chat_cache.py",
+    "component",
     "stream/defined_parser.py",
     "stream/astream.py",
-    "stream/astream",
-    "start/info_collecter.py",
-    "start/info_collecter",
-    "info_collecter",
-    "start/with_structured_output.py",
-    "start/TavilySearch.py",
-    "start/tool.pyDdGVLf.bck",
-    "start/tool.pyNONAti.bck",
-    "start/tool.pyoAlUHd.bck"
+    "stream/astream"
   ]
 }
