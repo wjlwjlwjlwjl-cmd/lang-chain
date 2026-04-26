@@ -578,3 +578,149 @@ while True:
         print(token.content, end='')
     print()
 ```
+
+### 9.7 少样本提示
+
+少样本提示就是给 LLM 几个处理好的例子，告诉 LLM 处理的思路、方式，就像初高中常考的新定义问题一样，让 LLM 比着葫芦画瓢
+
+在 LangChain 中，少样本提示通过 FewShotChatMessagePromptTemplate 实现，其中我们可以传入一下内容作为少样本提示：
+
+* `example_prompt`，是一个 ChatPromptTemplate，用来作为每一个示例的格式化模板
+* `examples`，是一个列表，里面放着我们填入模板的内容
+
+随后，通过消息占位符就可以构造消息列表，传给 LLM，就可以完成有少样本提示的请求
+
+```python
+examples = [
+    {"input": "1a1=?", "output": "2"},
+    {"input": "1a2=?", "output": "3"},
+    {"input": "3a3=?", "output": "6"},
+]
+chat_template = ChatPromptTemplate(
+    [
+        ("user", "{input}"),
+        ("ai", "{output}"),
+    ]
+)
+
+few_shot_template = FewShotChatMessagePromptTemplate(
+    example_prompt=chat_template, 
+    examples=examples
+)
+final_prompt = ChatPromptTemplate(
+    [
+        ("system", "你是一个数学专家"),
+        few_shot_template,
+        ("human", "{input}")
+    ]
+)
+
+chain = final_prompt | model
+chain.invoke({"input": "15a10等于多少?"}).pretty_print()
+```
+
+#### 9.7.1 推理引导
+
+通过给予 LLM 几个示例问题的思考流程，可以让 LLM 按照我们思考的流程去分析推理，增强结果的可靠度
+
+```python
+examples = [
+    {
+        "question": "李⽩和杜甫，谁更⻓寿？",
+        "answer": """
+        是否需要后续问题：是的。
+        后续问题：李⽩享年多少岁？
+        中间答案：李⽩享年61岁。
+        后续问题：杜甫享年多少岁？
+        中间答案：杜甫享年58岁。
+        所以最终答案是：李⽩
+        """
+    },
+    {
+        "question": "腾讯的创始⼈什么时候出⽣？",
+        "answer": """
+        是否需要后续问题：是的。
+        后续问题：腾讯的创始⼈是谁？
+        中间答案：腾讯由⻢化腾创⽴。
+        后续问题：⻢化腾什么时候出⽣？
+        中间答案：⻢化腾出⽣于1971年10⽉29⽇。
+        所以最终答案是：1971年10⽉29⽇
+        """,
+    },
+]
+
+chat_template = ChatPromptTemplate.from_messages(
+    [
+        ("user", "{question}"),
+        ("ai", "{answer}")
+    ]
+)
+
+few_shot_template = FewShotChatMessagePromptTemplate(
+    example_prompt=chat_template,
+    examples=examples, 
+)
+
+final_message = ChatPromptTemplate(
+    [
+        few_shot_template,
+        ("user", "《星球大战》的导演和《教父》的导演来自同一个国家吗?")
+    ]
+)
+
+chain = final_message | model
+chain.invoke({}).pretty_print()
+```
+
+#### 9.7.2 使用示例数据增强 LangChain 数据提取能力
+
+前面我们提到过，可以通过 with_structured_output 让 LLM 按照我们的格式输出信息，达到信息提取的效果。这里我们同样可以通过少样本数据提供示例
+
+```python
+class Person(BaseModel):
+    name: Optional[str] = Field(description="姓名")
+    skin_color: Optional[str] = Field(description="这个人的肤色")
+    hair_color: Optional[str] = Field(description="这个人的发色")
+    height_in_meters: Optional[str] = Field(description="这个人以米为单位的身高")
+class Data(BaseModel):
+    people: List[Person]
+
+examples = [
+    (
+        "海洋是⼴阔⽽蓝⾊的。它有两万多英尺深。",
+        Data(people=[]), # 没有⼈物信息的情况
+    ),
+    (
+        "⼩强从中国远⾏到美国。",
+        Data(
+            people=[
+                Person(name="⼩强", height_in_meters=None, skin_color=None,
+                hair_color=None)
+            ]
+        ), # 部分信息缺失的情况
+    )
+]
+chat_message = ChatPromptTemplate(
+    [
+        ("system", "你是一个任务信息提取专家，如果给你的描述中，没有相关信息，则相应字段为 None"),
+        ("placeholder", "{example_messages}"),
+        ("user", "{new_message}")
+    ]
+)
+
+example_messages = []
+for txt, tool_call in examples:
+    if tool_call.people:
+        ai_response = "未识别到人"
+    else:
+        ai_response = "识别到人"
+    example_messages.extend(
+        tool_example_to_messages(
+            txt, [tool_call], ai_response = ai_response
+        )
+    )
+
+model_with_structured_output = model.with_structured_output(Data)
+chain = chat_message | model_with_structured_output
+print(chain.invoke({"example_messages": example_messages, "new_message": "篮球场上，⾝⾼两⽶的中锋王伟默契地将球传给⼀⽶七的后卫挚友李明，完成⼀记绝杀。" "这对⽼友⽤⼗年配合弥补了⾝⾼的差距。"}))
+```
