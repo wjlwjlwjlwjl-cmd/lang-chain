@@ -619,6 +619,12 @@ chain = final_prompt | model
 chain.invoke({"input": "15a10等于多少?"}).pretty_print()
 ```
 
+如果使用 PromptTemplate + FewShotPromptTemplate 的话，还可以加上以下关键词（注意新版本 LangChain 不能混用）：
+
+* `prefix`: 在少样本提示前给予 LLM 的信息
+
+* `suffix`：在少样本提示后给予 LLM 的信息
+
 #### 9.7.1 推理引导
 
 通过给予 LLM 几个示例问题的思考流程，可以让 LLM 按照我们思考的流程去分析推理，增强结果的可靠度
