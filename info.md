@@ -730,3 +730,78 @@ model_with_structured_output = model.with_structured_output(Data)
 chain = chat_message | model_with_structured_output
 print(chain.invoke({"example_messages": example_messages, "new_message": "篮球场上，⾝⾼两⽶的中锋王伟默契地将球传给⼀⽶七的后卫挚友李明，完成⼀记绝杀。" "这对⽼友⽤⼗年配合弥补了⾝⾼的差距。"}))
 ```
+### 9.8 示例选择器
+
+一方面 LLM 的上下文窗口是由最大限制的，这意味着我们不能无脑的把各种示例都丢给 LLM；另一方面，当示例过多时，LLM 会出现混淆示例的情况，反而起到反面作用。
+
+所以我们要对示例有所选择。
+
+#### 9.8.1 通过长度选择器选择
+
+使用 LengthBasedExampleSelector，通过指定 max_length 的最大片段个数，分割示例。默认片段由空格、换行符、制表符这些空白字符分割
+
+使用了示例选择器的少样本提示，不需要再使用 examples 字段，由 example_selector 提供选择过后的样本
+
+```python
+examples=[
+    {"input": "happy", "output": "sad"},
+    {"input": "tall", "output": "short"},
+    {"input": "energetic", "output": "lethargic"},
+]
+prompt_template = PromptTemplate(
+    input_variables=["input",  "output"],
+    template="input: {input}\noutput: {output}"
+)
+length_selector = LengthBasedExampleSelector(
+    examples=examples,
+    example_prompt=prompt_template,
+    max_length=25 # 按空格、换行、制表符分割之后的片段的数量
+)
+few_shot_template = FewShotPromptTemplate(
+    example_selector=semantic_selector,    
+    example_prompt=prompt_template,
+    prefix="给出每个输入的反义词",
+    suffix="input: {adjective}\n",
+    input_variables=["adjective"]
+)
+print(few_shot_template.invoke({"adjective": "vim"}).to_messages()[0].content)
+```
+
+#### 9.8.2 通过嵌入模型进行语义选择
+
+来看下面的两个例子
+
+```text
+1. 苹果很甜
+2. 苹果有自己的笔记本电脑
+```
+
+从语义上说，这两个是完全不同的，一个是水果，一个是公司。通过嵌入模型对我们的若干个例子转化成向量进行分析，就可以找到相似点、不同点，从而提炼成我们需要的数目的例子
+
+在 LangChain 中，使用 语义示例选择器，我们可以使用 SemanticSimilarityExampleSelector
+* `OpenAIEmbeddings`，用来生成度量语义向量的嵌入模型
+* `Chroma`，VectorStore，用来存放和管理向量的数据库
+* `k`，指定最后选择剩下的示例的个数
+
+```python
+examples=[
+    {"input": "happy", "output": "sad"},
+    {"input": "tall", "output": "short"},
+    {"input": "energetic", "output": "lethargic"},
+]
+prompt_template = PromptTemplate(
+    input_variables=["input",  "output"],
+    template="input: {input}\noutput: {output}"
+)
+
+semantic_selector = SemanticSimilarityExampleSelector.from_examples(
+    examples, OpenAIEmbeddings(model="text-embedding-v3"), Chroma, 2)
+    
+few_shot_template = FewShotPromptTemplate(
+    example_selector=semantic_selector,    
+    example_prompt=prompt_template,
+    prefix="给出每个输入的反义词",
+    suffix="input: {adjective}\n",
+    input_variables=["adjective"]
+)
+```

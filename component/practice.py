@@ -1,26 +1,34 @@
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import FewShotChatMessagePromptTemplate, ChatPromptTemplate
 
 model = ChatOpenAI(
-    model="qwen-turbo"
+    model = "qwen-turbo"
 )
 
 chat_template = ChatPromptTemplate(
     [
-        ("system", "你是一个翻译家"),
-        ("user", "将下列内容翻译成{language}, {content}"),
+        ("user", "{question}"),
+        ("ai", "{answer}")
     ]
 )
 
-final_message = chat_template.invoke(
-    {
-        "language": "英文", 
-        "content": "明月几时有，把酒问青天"
-    }
-).to_messages()
+examples = [
+    {"question": "1@2=?", "answer": "3"},
+    {"question": "2@2=?", "answer": "4"},
+    {"question": "3@2=?", "answer": "5"},
+]
 
-parser = StrOutputParser()
-chain = model | parser
-print(chain.invoke(final_message))
+few_shot_template = FewShotChatMessagePromptTemplate(
+    examples=examples,
+    example_prompt=chat_template
+)
 
+final_messages = ChatPromptTemplate(
+    [
+        ("system", "你是一个数学大师"),
+        few_shot_template,
+        ("user", "8@3=?")
+    ]
+)
+
+model.invoke(final_messages.invoke({})).pretty_print()

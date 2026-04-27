@@ -2,6 +2,7 @@ from langchain_core import example_selectors
 from langchain_core.example_selectors import LengthBasedExampleSelector, SemanticSimilarityExampleSelector
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import PromptTemplate, FewShotPromptTemplate
+from langchain_chroma import Chroma
 
 examples=[
     {"input": "happy", "output": "sad"},
@@ -24,14 +25,11 @@ length_selector = LengthBasedExampleSelector(
 )
 
 # 通过语义选择
-semantic_selector = SemanticSimilarityExampleSelector(
-    examples=examples,
-    model=OpenAIEmbeddings("Qwen/Qwen3-Embedding-0.6B")
-    k = 2
-)
+semantic_selector = SemanticSimilarityExampleSelector.from_examples(
+    examples, OpenAIEmbeddings(model="text-embedding-v3", chunk_size=1), Chroma, 2)
 
 few_shot_template = FewShotPromptTemplate(
-    example_selector=length_selector,    
+    example_selector=semantic_selector,    
     example_prompt=prompt_template,
     prefix="给出每个输入的反义词",
     suffix="input: {adjective}\n",
