@@ -1,4 +1,4 @@
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.utils.function_calling import tool_example_to_messages
 from typing import List, Optional
 from pydantic import Field, BaseModel

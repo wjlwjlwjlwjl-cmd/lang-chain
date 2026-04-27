@@ -805,3 +805,100 @@ few_shot_template = FewShotPromptTemplate(
     input_variables=["adjective"]
 )
 ```
+
+#### 9.8.3 MMR
+
+MMR 即最大边际相关性，Maximum Margin Relavance，通过将冗余度和相关性结合共同为样本打分的方式，使得样本既能够保证主题的相关性，又能够保证样本的多样性。
+
+举个例子，在招聘的时候，最大语义相关性就是给每个人直接都打一个分，直接选最高的；最大边际相关性就是，先选出一个分最高的（最相关的），后续每选择下一个人的时候，既看分数高低（相关性），有看这个人和其他已经选出的人的技能重复性，最后选出来一个每个人的技能都相对独立的团队
+
+MMR 可以用在信息推荐，保证主题是符合用户喜爱的主题的，同时形式等尽可能多样，缓解信息茧房
+
+在 LangChain 中，为我们提供了 MaxMarginalRelevanceExampleSelector 来进行最大边际相关性的信息筛选，使用格式与最大语义相关性的相同
+
+#### 9.8.4 语义 NGram 重叠
+
+首先我们需要明确一些概念
+
+##### 9.8.4.1 什么是 NGram？
+* NGram 是指字符序列中连续的词或字符
+* 比如 I Like Apple，I 、Like、Apple 都可以是 NGram
+
+##### 9.8.4.2 什么是 NGram 重叠
+* 两个字符序列中相同的 NGram 就是 NGram 重叠
+* 比如句子 Apple is red 和 I have a red apple 中，apple、red 就是重叠的 NGram，NGram 重叠度越高，代表两个文本序列在用词上越相近
+
+##### 9.8.4.3 什么是语义 NGram 重叠
+* 上述的比较过程中，不直接比较词本身是否相同，而是比较词在向量空间中的相似性。
+* 比如，句子 I love you 和 I like you 的语义 NGram 重叠，就要比 I hate you 的要高
+* NGram 在检测抄袭上有很大用处，只是通过重新表述、同义词替换得来的文本之间就会有很大的语义 NGram 重叠度
+
+##### 9.8.4.4 LangChain 中使用 NGramOverlapExampleSelector
+
+在 LangChain 中，想要使用通过语义 NGram 筛选的示例选择器，需要使用 langchain_community 包中的 NGramOverlapExampleSelector
+
+NGramOverlapExampleSelector 的参数使用基本相同，但是多了一个 threshold 参数，用来表示筛选的门槛，一般取值在0.0 ～ 1.0。其中：
+* -1.0 表示保留所有示例，仅仅通过语义 NGram 重叠度进行降序排序
+* 0.0 表示只删除掉毫不相关的示例，其他只要有一点相关的都保留
+* 1.0 表示完全相关的保留，其他删除，但一般很难做到
+* >1.0 表示全部删除，提供一个空示例集
+
+在使用时，需要导入包 nltk，这个包在各种自然语言处理的包中都很常用
+
+### 9.9 输出解析器 (Output Parser)
+
+#### 9.9.1 输出解析器和 with_return_object 的区别
+
+* 输出解析器是 LangChain 为我们提供的一个功能，with_return_object 是大模型的功能，使用后返回了一个带格式化返回结果的大模型
+
+* 使用上，输出解析器可以进行链式调用，而 with_return_object 只能通过返回的具有 Runnable 接口的对象使用
+
+#### 9.9.2 StrOutputParser
+
+前面已经提到过了，这里省略
+
+#### 9.9.3 PydanticOutputParser
+
+这里我们可以定义一个 Pydantic 类，通过 get_format_instruction 方法，获得一个给大模型的、不影响大模型推理思考、只指导大模型在返回结果时按 Pydantic 类要求的结构返回的指令，同时，因为这个指令是固定的，所以还可以通过 PromptTemplate 的 partial_variables 字段固定下来，不用每次传入
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
+from pydantic import BaseModel, Field
+from typing import Optional
+from langchain_core.prompts import PromptTemplate
+
+model = ChatOpenAI(
+    model = "qwen-turbo"
+)
+def pydantic_output_parser_test():
+    class Joke(BaseModel):
+        setup: Optional[str] = Field(description="笑话的开头"),
+        punchline: Optional[str] = Field(description="笑话的妙语"),
+        rate: Optional[int] = Field(default=None, description="笑话的评分(1~10)")
+
+    pydantic_output_parser = PydanticOutputParser(pydantic_object=Joke)
+    prompt_template = PromptTemplate(
+        template="回答用户指令：{format_instruction} \n {query}\n",
+        input_variables=["query"],
+        partial_variables={"format_instruction": pydantic_output_parser.get_format_instructions()}
+    )
+    chain=prompt_template | model | pydantic_output_parser
+    print(chain.invoke({"query": "将一个关于电脑的笑话"}))
+```
+
+#### 9.9.4 JsonOutputParser
+
+在 PromptTemplate 中的使用和 JsonOutputParser 一样，可以不传结构化要求，只是将正文按照 json 的格式返回；也可以通过指定 pydantic_object 的方式，让返回结构按照 pydantic 类的结构返回 json 格式
+
+```python
+def json_output_parser_test():
+    output_parser = JsonOutputParser()
+    prompty_template = PromptTemplate(
+        template="answer user's question: {input}\n {format_instruction}",
+        input_variables=["input"],
+        partial_variables={"format_instruction": output_parser.get_format_instructions()}
+    )
+    chain=prompty_template|model|output_parser
+    print(chain.invoke({"input": "give me a joke about computer"}))
+```

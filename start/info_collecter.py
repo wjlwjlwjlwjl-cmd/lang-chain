@@ -9,7 +9,6 @@ model = ChatOpenAI(
 )
 class Info(BaseModel):
     """人员信息提取"""
-
     name: Annotated[str, Field("人员的姓名")]
     gender: Annotated[Optional[str], Field(default=None, description="人员的性别")]
     address: Annotated[Optional[str], Field(default=None, description="人员的国籍")]

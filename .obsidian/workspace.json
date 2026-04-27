@@ -6,7 +6,7 @@
       {
         "id": "786b555491d3a7f4",
         "type": "tabs",
-        "dimension": 13.003901170351103,
+        "dimension": 13.003901170351101,
         "children": [
           {
             "id": "aec3f306c1f1b137",
@@ -28,7 +28,7 @@
       {
         "id": "926e16190572e022",
         "type": "tabs",
-        "dimension": 86.99609882964889,
+        "dimension": 86.99609882964891,
         "children": [
           {
             "id": "4e7cd8ddb17b2952",
@@ -101,7 +101,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 222.50247192382812
+    "width": 222.50247192382812,
+    "collapsed": true
   },
   "right": {
     "id": "e2eb9fc670e11a5d",
@@ -208,6 +209,7 @@
   },
   "active": "4e7cd8ddb17b2952",
   "lastOpenFiles": [
+    "output_parser.py~",
     "info.md",
     "component/langchain_hub.py",
     "langchain_hub.py",
