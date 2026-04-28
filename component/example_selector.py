@@ -21,7 +21,7 @@ prompt_template = PromptTemplate(
 length_selector = LengthBasedExampleSelector(
     examples=examples,
     example_prompt=prompt_template, 
-    max_length=10 # 按空格、换行、制表符分割之后的片段的数量
+    max_length=10, # 按空格、换行、制表符分割之后的片段的数量
 )
 
 # 通过语义选择

@@ -902,3 +902,76 @@ def json_output_parser_test():
     chain=prompty_template|model|output_parser
     print(chain.invoke({"input": "give me a joke about computer"}))
 ```
+
+### 9.10 RAG (Retrieval-Augmented Generation)
+
+#### 9.10.1 RAG 的流程
+
+LLM 最擅长推理，但是不擅长进行信息的获取，因为模型的训练时间是有截止日期的。所以第一反应是让大模型和搜索引擎结合起来，但是这只能获得最新的有限信息，比如公司内部文档等都无法指通过搜索引擎获得。
+
+检索增强生成，大体分为两个阶段 **离线数据处理** 和 **在线检索**，将私有数据或者浏览器检索获得最新知识整理获得知识库
+
+**离线数据处理** 更详细来说，分为下面的三个部分
+
+1. **文档加载**，将各种形式的文档加载（拷贝）过来，形式可以是 PDF、MarkDown、Python、Java、C++ 代码等
+
+2. **文档分割**，将加载完成的文档，切分成若干的文档块。在 LangChain 中，由 Document 对象保管文本内容 (page_content) 和属性 (metadata)
+
+3. **存储**，首先把分割出的文档块转换成向量的形式，这个过程称为嵌入；其次将这些向量存储管理起来供给下面的流程使用，比如使用 LangChain_Chroma 提供的向量数据库
+
+**在线检索**，是将上面处理好的向量数据库筛选出来符合主题的部分，交给 LLM 结合问题，整合出更可靠的答案。更详细的，分为这两个部分
+
+1. **检索**，通过语义相关性，筛选出知识库中和问题相关的 (MSR，MMR等) 知识
+
+2. **输出**，结合筛选出来的资料，和问题本身，通过 LLM 的推理，生成答案输出
+
+#### 9.10.2 PyPDFLoader
+
+langchain_community 提供的 PDF 文档加载器，只需要通过文档路径就可以构建 PyPDFLoader，我们可以通过其获得文档原始内容、页数、结构化的属性信息等
+
+```python
+from langchain_community.document_loaders import PyPDFLoader
+pdf_loader = PyPDFLoader("/home/human/Document/bite/MySQL/test.pdf")
+doc = pdf_loader.load()
+print(f"pdf has {len(doc)} pages")
+print(f"the first page's first 200 words: {doc[0].page_content[:200]}")
+print(f"the first page's metadata {doc[0].metadata}")
+```
+
+#### 9.10.3 UnstructuredMarkdownReader
+
+```shell
+{'Image', 'Title', 'ListItem', 'Table', 'NarrativeText', 'UncategorizedText'}
+```
+
+langchain_community 提供的 MarkDown 文档加载器，依旧只需要文档路径就可以构建，但是多了一个 mode 参数，可以提供两种选项
+
+1. `single`，将文件原始内容和属性都放在一个 Document 对象中返回，不进行类型的切分
+
+2. `elements`，将文件原始内容和属性放在多个 Document 对象中返回，其中 metadata 中的 catagory 会对文本的 Markdown 语法角色进行划分，具体包括下面的几种属性
+
+	1.  `Image`，Markdown 中插入的图片，通过 `!(comment)[path_to_file]` 的语法
+
+	2. `Title`，`#` 语法的标题，其中，各个级别的标题之间，通过 `metadata` 中的 `parent_id` 属性确定，我们的每个元素都有自己的 `element_id`
+
+	3. `ListItem`，包括有序列表和无需列表
+
+	4. `Table`，使用 Markdown 语法创建的表格
+
+	5. `NarrativeText`，叙述性文本，一个或者多个连续的段落
+
+	6. `UncategorizedText`，未分类文本，主要是各种脚注、注释等小文本
+
+### 9.11 文档分割
+
+在通过各种形式的文档完成文档加载之后，并不能直接录入知识库。一方面，大模型的上下文窗口有限，不分割可能压根就塞不进去；另一方面，分割之后，有利于进行管理，更细的粒度也可以让语义搜索更加精确
+
+文档分割也有几种形式，可以根据文档长度，也可以根据文档语义。前者大体上分为 **根据字符分割** 或者 **根据Token分割**
+
+#### 9.11.1 CharacterTextSpliter
+
+根据指定的**字符数**进行分割，同时也需要设置每个小块之间有一定的重叠，否则可能会造成语义割裂或者上下文缺失（比如“兽人永不为奴，除非保持包吃包住”这句话）。这两项通过 chunk_size 和 chunk_overlap 指定。
+
+关于分割符，默认是 `\n\n` ，并且会按照 "\\n\\n" "\\n" " " "" 的顺序依次进行尝试。原因是，切分除了把文档化成小块之外，还有一个原则就是尽可能不要破坏原来的语义。所以当无法在既符合长度又保证语义的情况下，就会选择把信息保留下来，并通过警告的方式告知。（把 chunk_size 设置为200左右可以减少超过的分割）
+
+可以通过 `length_function` 字段指定分割长度的计算方式

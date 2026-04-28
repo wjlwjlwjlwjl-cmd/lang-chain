@@ -209,6 +209,10 @@
   },
   "active": "4e7cd8ddb17b2952",
   "lastOpenFiles": [
+    "component/TestSpliter.py~",
+    "component/example_selector.py~",
+    "component/TestSpliter.py",
+    "component/FileLoader.py~",
     "output_parser.py~",
     "info.md",
     "component/langchain_hub.py",
@@ -216,10 +220,6 @@
     "component/template.py",
     "component/merge_messages.py",
     "component/filter_messages.py",
-    "component/trimmer.py",
-    "component/chat_cache.py",
-    "component",
-    "stream/defined_parser.py",
-    "stream/astream.py"
+    "component/trimmer.py"
   ]
 }
