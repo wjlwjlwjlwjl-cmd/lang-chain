@@ -1,34 +1,29 @@
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import FewShotChatMessagePromptTemplate, ChatPromptTemplate
+from langchain_community.example_selectors import NGramOverlapExampleSelector
+from langchain_core.prompts import PromptTemplate, FewShotPromptTemplate
 
-model = ChatOpenAI(
-    model = "qwen-turbo"
-)
-
-chat_template = ChatPromptTemplate(
-    [
-        ("user", "{question}"),
-        ("ai", "{answer}")
-    ]
+prompt_template = PromptTemplate(
+    template="Input: {input}\nOutput: {output}\n",
+    input_variables=["input", "output"]
 )
 
 examples = [
-    {"question": "1@2=?", "answer": "3"},
-    {"question": "2@2=?", "answer": "4"},
-    {"question": "3@2=?", "answer": "5"},
+    {"input": "See Spot Run", "output": "看见Spot在跑"},
+    {"input": "My Dog Barks", "output": "我的狗在叫"},
+    {"input": "Spot can Run", "output": "Spot可以跑"},
 ]
 
-few_shot_template = FewShotChatMessagePromptTemplate(
+ngram_overlap_example_selector = NGramOverlapExampleSelector(
     examples=examples,
-    example_prompt=chat_template
+    example_prompt=prompt_template,
+    threshold=0.0
 )
 
-final_messages = ChatPromptTemplate(
-    [
-        ("system", "你是一个数学大师"),
-        few_shot_template,
-        ("user", "8@3=?")
-    ]
+few_shot_template = FewShotPromptTemplate(
+    example_selector=ngram_overlap_example_selector,
+    example_prompt=prompt_template,
+    prefix="根据输入进行输出",
+    suffix="Input: {input}\nOutput:",
+    input_variables=["input"],
 )
 
-model.invoke(final_messages.invoke({})).pretty_print()
+print(few_shot_template.invoke({"input": "Spot can Run Fast"}).to_messages()[0].content)
