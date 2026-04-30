@@ -209,17 +209,17 @@
   },
   "active": "4e7cd8ddb17b2952",
   "lastOpenFiles": [
+    "RAG/redis_store.py~",
+    "RAG/redis_store.py",
+    "RAG/vector_store.py~",
+    "RAG/similarity_search.py",
+    "RAG/vector_store.py",
     "RAG/embed.py~",
     "RAG/embed.py",
     "RAG/FileLoader.py",
     "RAG/text_spliter.py",
     "RAG",
     "component/output_parser.py",
-    "component/text_spliter.py~",
-    "component/TestSpliter.py~",
-    "component/example_selector.py~",
-    "component/TestSpliter.py",
-    "component/FileLoader.py~",
     "info.md"
   ]
 }
