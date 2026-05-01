@@ -209,6 +209,8 @@
   },
   "active": "4e7cd8ddb17b2952",
   "lastOpenFiles": [
+    "info.md.tmp.4640.1777625148429",
+    "info.md.tmp.4640.1777625095859",
     "RAG/redis_store.py~",
     "RAG/redis_store.py",
     "RAG/vector_store.py~",
@@ -218,8 +220,6 @@
     "RAG/embed.py",
     "RAG/FileLoader.py",
     "RAG/text_spliter.py",
-    "RAG",
-    "component/output_parser.py",
     "info.md"
   ]
 }
